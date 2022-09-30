@@ -11,7 +11,7 @@ func Check(err error) {
 	}
 }
 
-func calculateCorrelation(houses []*HouseInfo, filterConditions []*searchCondition) float64 {
+func calculateCorrelation(filterConditions []*searchCondition) float64 {
 	n := float64(len(houses))
 
 	var sumX float64
@@ -58,6 +58,10 @@ func isConditionValid(h *HouseInfo, condition *searchCondition) bool {
 	if condition.isString {
 		return value.String() == condition.fieldValueString
 	}
-	//TODO add other types of check for int
-	return value.Int() == int64(condition.fieldValueInt)
+	if condition.inequality == Equal {
+		return value.Int() == int64(condition.fieldValueInt)
+	} else if condition.inequality == GreaterThanEqual {
+		return value.Int() >= int64(condition.fieldValueInt)
+	}
+	return value.Int() <= int64(condition.fieldValueInt)
 }
