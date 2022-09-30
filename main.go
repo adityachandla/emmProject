@@ -5,6 +5,8 @@ import (
 	"github.com/gammazero/deque"
 	"log"
 	"reflect"
+	"sort"
+	"strings"
 )
 
 type inequality int
@@ -14,6 +16,18 @@ const (
 	LessThanEqual
 	GreaterThanEqual
 )
+
+func (i inequality) String() string {
+	switch i {
+	case Equal:
+		return "="
+	case LessThanEqual:
+		return "<="
+	case GreaterThanEqual:
+		return ">="
+	}
+	panic("Unexpected value for inequality")
+}
 
 type intTarget struct {
 	fieldName string
@@ -28,16 +42,44 @@ type stringTarget struct {
 }
 
 type searchNode struct {
-	conditions           []func(*HouseInfo) bool
+	conditions           searchConditions
 	score                float64
 	stringTargetStartIdx int
 	intTargetStartIdx    int
 }
 
 type searchCondition struct {
-	fieldName  string
-	isString   bool //it will either be string or int
-	inequality inequality
+	fieldName        string
+	isString         bool //it will either be string or int
+	fieldValueString string
+	fieldValueInt    int
+	inequality       inequality
+}
+
+func (cond *searchCondition) String() string {
+	if cond.isString {
+		return fmt.Sprintf("(%s %s %s)", cond.fieldName, cond.inequality, cond.fieldValueString)
+	}
+	return fmt.Sprintf("(%s %s %d)", cond.fieldName, cond.inequality, cond.fieldValueInt)
+}
+
+type searchConditions []*searchCondition
+
+func (conditions searchConditions) Len() int { return len(conditions) }
+func (conditions searchConditions) Less(i, j int) bool {
+	return conditions[i].fieldName < conditions[j].fieldName
+}
+func (conditions searchConditions) Swap(i, j int) {
+	conditions[i], conditions[j] = conditions[j], conditions[i]
+}
+
+func (conditions searchConditions) String() string {
+	sort.Sort(conditions)
+	sb := strings.Builder{}
+	for _, field := range conditions {
+		sb.WriteString(field.String())
+	}
+	return sb.String()
 }
 
 var searchRes = make([]*searchNode, 0, 100)
@@ -50,9 +92,8 @@ func main() {
 	//intTargets := calculateIntTargets(houses, intFields)
 	stringTargets := calculateStringTargets(houses, stringFields)
 	bfsEvaluate(stringTargets, houses)
-	fmt.Println(len(searchRes))
 	for _, res := range searchRes {
-		fmt.Printf("%f\n", res.score)
+		log.Printf("%s %f\n", res.conditions, res.score)
 	}
 	fmt.Printf("Comparision to: %f", calculateCorrelation(houses, nil))
 }
@@ -68,11 +109,9 @@ func bfsEvaluate(targets []*stringTarget, houses []*HouseInfo) {
 				if !hasSupport(count, len(houses)) {
 					continue
 				}
-				log.Printf("Adding condition on %s to be equal to %s at Depth: %d\n",
-					targetToAdd.fieldName, targetValue, len(curr.conditions))
-				var newConditions []func(*HouseInfo) bool
+				var newConditions []*searchCondition
 				if curr.conditions == nil {
-					newConditions = make([]func(*HouseInfo) bool, 0, 4) //TODO This should be max depth
+					newConditions = make([]*searchCondition, 0, 4) //TODO This should be max depth
 				} else {
 					newConditions = copyOf(curr.conditions)
 				}
@@ -99,9 +138,12 @@ func copyOf[T any](slice []T) []T {
 	return newSlice
 }
 
-func getCondition(targetValue string, target *stringTarget) func(*HouseInfo) bool {
-	return func(h *HouseInfo) bool {
-		return reflect.ValueOf(h).Elem().FieldByName(target.fieldName).String() == targetValue
+func getCondition(targetValue string, target *stringTarget) *searchCondition {
+	return &searchCondition{
+		isString:         true,
+		fieldName:        target.fieldName,
+		fieldValueString: targetValue,
+		inequality:       Equal,
 	}
 }
 
@@ -112,7 +154,7 @@ func calculateStringTargets(houses []*HouseInfo, fields []string) []*stringTarge
 	}
 
 	for _, house := range houses {
-		for idx, _ := range stringTargets {
+		for idx := range stringTargets {
 			value := reflect.ValueOf(house).Elem().FieldByName(stringTargets[idx].fieldName).String()
 			stringTargets[idx].values[value]++
 		}
@@ -133,7 +175,7 @@ func calculateIntTargets(houses []*HouseInfo, fields []string) []*intTarget {
 	}
 
 	for _, house := range houses {
-		for idx, _ := range intTargets {
+		for idx := range intTargets {
 			fieldVal := int(reflect.ValueOf(house).Elem().FieldByName(intTargets[idx].fieldName).Int())
 			intTargets[idx].counter[fieldVal]++
 			if fieldVal > intTargets[idx].minVal {

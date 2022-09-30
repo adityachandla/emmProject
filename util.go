@@ -1,6 +1,9 @@
 package main
 
-import "math"
+import (
+	"math"
+	"reflect"
+)
 
 func Check(err error) {
 	if err != nil {
@@ -8,17 +11,7 @@ func Check(err error) {
 	}
 }
 
-func filter[K any](list []*K, filterExp func(*K) bool) []*K {
-	filtered := make([]*K, 0, 10)
-	for _, val := range list {
-		if filterExp(val) {
-			filtered = append(filtered, val)
-		}
-	}
-	return filtered
-}
-
-func calculateCorrelation(houses []*HouseInfo, filterConditions []func(*HouseInfo) bool) float64 {
+func calculateCorrelation(houses []*HouseInfo, filterConditions []*searchCondition) float64 {
 	n := float64(len(houses))
 
 	var sumX float64
@@ -48,14 +41,23 @@ func calculateCorrelation(houses []*HouseInfo, filterConditions []func(*HouseInf
 	return numerator / denominator
 }
 
-func shouldEvaluate(h *HouseInfo, filters []func(*HouseInfo) bool) bool {
-	if filters == nil {
+func shouldEvaluate(h *HouseInfo, conditions searchConditions) bool {
+	if conditions == nil {
 		return true
 	}
-	for _, filter := range filters {
-		if !filter(h) {
+	for _, condition := range conditions {
+		if !isConditionValid(h, condition) {
 			return false
 		}
 	}
 	return true
+}
+
+func isConditionValid(h *HouseInfo, condition *searchCondition) bool {
+	value := reflect.ValueOf(h).Elem().FieldByName(condition.fieldName)
+	if condition.isString {
+		return value.String() == condition.fieldValueString
+	}
+	//TODO add other types of check for int
+	return value.Int() == int64(condition.fieldValueInt)
 }
