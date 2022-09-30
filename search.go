@@ -91,7 +91,12 @@ func processStringTargets(curr *searchNode, queue *deque.Deque[*searchNode]) {
 				continue
 			}
 			newConditions := getConditionCopy(curr.conditions)
-			newConditions = append(newConditions, getCondition(targetValue, targetToAdd))
+			newConditions = append(newConditions, &searchCondition{
+				isString:         true,
+				fieldName:        targetToAdd.fieldName,
+				fieldValueString: targetValue,
+				inequality:       Equal,
+			})
 			nextNode := &searchNode{
 				conditions:           newConditions,
 				stringTargetStartIdx: targetIdx + 1,
@@ -110,8 +115,8 @@ func processIntTargets(curr *searchNode, queue *deque.Deque[*searchNode]) {
 		//go from start to end accumulating count and only branch out when
 		//count is greater than minimum support
 		frequency := 0
-		for i := targetToAdd.minVal; i <= targetToAdd.maxVal; i++ {
-			frequency += targetToAdd.counter[i]
+		for i := targetToAdd.minVal + 1; i <= targetToAdd.maxVal; i += 2 {
+			frequency += targetToAdd.counter[i] + targetToAdd.counter[i-1]
 			if !hasSupport(frequency, len(houses)) {
 				continue
 			}
@@ -123,13 +128,20 @@ func processIntTargets(curr *searchNode, queue *deque.Deque[*searchNode]) {
 				inequality:    LessThanEqual,
 				isString:      false,
 			})
-			addNewIntNode(curr, queue, newConditions, targetIdx)
+			nextNode := &searchNode{
+				intTargetStartIdx:    targetIdx + 1,
+				stringTargetStartIdx: curr.stringTargetStartIdx,
+				conditions:           newConditions,
+			}
+			nextNode.score = calculateCorrelation(newConditions)
+			queue.PushBack(nextNode)
+			searchRes[nextNode.conditions.String()] = nextNode
 		}
 		//go from end to start and only branch out when
 		//count is greater than minimum support
 		frequency = 0
-		for i := targetToAdd.maxVal; i >= targetToAdd.minVal; i-- {
-			frequency += targetToAdd.counter[i]
+		for i := targetToAdd.maxVal - 1; i >= targetToAdd.minVal; i-- {
+			frequency += targetToAdd.counter[i] + targetToAdd.counter[i+1]
 			if !hasSupport(frequency, len(houses)) {
 				continue
 			}
@@ -140,20 +152,16 @@ func processIntTargets(curr *searchNode, queue *deque.Deque[*searchNode]) {
 				inequality:    GreaterThanEqual,
 				isString:      false,
 			})
-			addNewIntNode(curr, queue, newConditions, targetIdx)
+			nextNode := &searchNode{
+				intTargetStartIdx:    targetIdx + 1,
+				stringTargetStartIdx: curr.stringTargetStartIdx,
+				conditions:           newConditions,
+			}
+			nextNode.score = calculateCorrelation(newConditions)
+			queue.PushBack(nextNode)
+			searchRes[nextNode.conditions.String()] = nextNode
 		}
 	}
-}
-
-func addNewIntNode(curr *searchNode, queue *deque.Deque[*searchNode], newConditions searchConditions, targetIdx int) {
-	nextNode := &searchNode{
-		intTargetStartIdx:    targetIdx + 1,
-		stringTargetStartIdx: curr.stringTargetStartIdx,
-		conditions:           newConditions,
-	}
-	nextNode.score = calculateCorrelation(newConditions)
-	queue.PushBack(nextNode)
-	searchRes[nextNode.conditions.String()] = nextNode
 }
 
 func getConditionCopy[T any](slice []T) []T {
@@ -167,13 +175,4 @@ func getConditionCopy[T any](slice []T) []T {
 
 func hasSupport(count, total int) bool {
 	return (float64(count) / float64(total)) > MinSupport
-}
-
-func getCondition(targetValue string, target *stringTarget) *searchCondition {
-	return &searchCondition{
-		isString:         true,
-		fieldName:        target.fieldName,
-		fieldValueString: targetValue,
-		inequality:       Equal,
-	}
 }
