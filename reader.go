@@ -1,9 +1,8 @@
-package reader
+package main
 
 import (
 	"bufio"
 	"fmt"
-	"github.com/adityachandla/emmTrial/util"
 	"os"
 	"reflect"
 	"strconv"
@@ -31,7 +30,7 @@ type HouseInfo struct {
 	PropertyCount  string  `csv:"Propertycount"`
 }
 
-func init() {
+func initMapping() {
 	tagToFieldNameMapping = make(map[string]string)
 	fields := reflect.VisibleFields(reflect.TypeOf(HouseInfo{}))
 	for _, field := range fields {
@@ -41,6 +40,7 @@ func init() {
 }
 
 func ReadHouses() []*HouseInfo {
+	initMapping()
 	file, _ := os.Open("melb_data.csv")
 	reader := bufio.NewReader(file)
 
@@ -75,11 +75,11 @@ func parseInfo(entry []string, headers []string) *HouseInfo {
 				fieldVal.SetString(entry[idx])
 			} else if kind == "int" {
 				val, err := strconv.ParseFloat(entry[idx], 64)
-				util.Check(err)
+				Check(err)
 				fieldVal.SetInt(int64(val))
 			} else if kind == "float64" {
 				val, err := strconv.ParseFloat(entry[idx], 64)
-				util.Check(err)
+				Check(err)
 				fieldVal.SetFloat(val)
 			}
 		}

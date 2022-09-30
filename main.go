@@ -1,99 +1,148 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"os"
+	"github.com/gammazero/deque"
+	"log"
 	"reflect"
-	"strconv"
-	"strings"
 )
 
-var tagToFieldNameMapping map[string]string
+type inequality int
 
-type houseInfo struct {
-	Suburb         string  `csv:"Suburb"`
-	Rooms          int     `csv:"Rooms"`
-	HouseType      string  `csv:"Type"`
-	Price          int     `csv:"Price"`
-	Method         string  `csv:"Method"`
-	SellerName     string  `csv:"SellerG"`
-	DistFromCenter float64 `csv:"Distance"`
-	Bedrooms       int     `csv:"Bedroom2"`
-	Bathrooms      int     `csv:"Bathroom"`
-	Car            int     `csv:"Car"`
-	LandSize       float64 `csv:"Landsize"`
-	BuildingArea   float64 `csv:"BuildingArea"`
-	YearBuilt      int     `csv:"YearBuilt"`
-	CouncilArea    string  `csv:"CouncilArea"`
-	Region         string  `csv:"Regionname"`
-	PropertyCount  string  `csv:"Propertycount"`
+const (
+	Equal inequality = iota
+	LessThanEqual
+	GreaterThanEqual
+)
+
+type intTarget struct {
+	fieldName string
+	counter   map[int]int
+	minVal    int
+	maxVal    int
 }
+
+type stringTarget struct {
+	fieldName string
+	values    map[string]int
+}
+
+type searchNode struct {
+	conditions           []func(*HouseInfo) bool
+	score                float64
+	stringTargetStartIdx int
+	intTargetStartIdx    int
+}
+
+type searchCondition struct {
+	fieldName  string
+	isString   bool //it will either be string or int
+	inequality inequality
+}
+
+var searchRes = make([]*searchNode, 0, 100)
 
 func main() {
-	makeMapping()
-	houses := readHouses()
-	fmt.Println(len(houses))
+	houses := ReadHouses()
+	//intFields := []string{"Bedrooms", "Bathrooms", "Car", "Rooms"}
+	stringFields := []string{"HouseType", "Suburb"}
+
+	//intTargets := calculateIntTargets(houses, intFields)
+	stringTargets := calculateStringTargets(houses, stringFields)
+	bfsEvaluate(stringTargets, houses)
+	fmt.Println(len(searchRes))
+	for _, res := range searchRes {
+		fmt.Printf("%f\n", res.score)
+	}
+	fmt.Printf("Comparision to: %f", calculateCorrelation(houses, nil))
 }
 
-func makeMapping() {
-	tagToFieldNameMapping = make(map[string]string)
-	fields := reflect.VisibleFields(reflect.TypeOf(houseInfo{}))
-	for _, field := range fields {
-		csvName := field.Tag.Get("csv")
-		tagToFieldNameMapping[csvName] = field.Name
-	}
-}
-
-func readHouses() []*houseInfo {
-	file, _ := os.Open("melb_data.csv")
-	reader := bufio.NewReader(file)
-
-	line, _, _ := reader.ReadLine()
-	headers := strings.Split(string(line), ",")
-
-	houses := make([]*houseInfo, 0, 100)
-
-	line, _, err := reader.ReadLine()
-	for err == nil {
-		entry := strings.Split(string(line), ",")
-		houseInfo := parseInfo(entry, headers)
-		houses = append(houses, houseInfo)
-		line, _, err = reader.ReadLine()
-	}
-	return houses
-}
-
-func parseInfo(entry []string, headers []string) *houseInfo {
-	if len(entry) != len(headers) {
-		fmt.Println(entry)
-		panic("Invalid row encountered")
-	}
-
-	info := &houseInfo{}
-	for idx, header := range headers {
-		name, exists := tagToFieldNameMapping[header]
-		if exists && entry[idx] != "" {
-			fieldVal := reflect.ValueOf(info).Elem().FieldByName(name)
-			kind := fieldVal.Kind().String()
-			if kind == "string" {
-				fieldVal.SetString(entry[idx])
-			} else if kind == "int" {
-				val, err := strconv.ParseFloat(entry[idx], 64)
-				check(err)
-				fieldVal.SetInt(int64(val))
-			} else if kind == "float64" {
-				val, err := strconv.ParseFloat(entry[idx], 64)
-				check(err)
-				fieldVal.SetFloat(val)
+func bfsEvaluate(targets []*stringTarget, houses []*HouseInfo) {
+	queue := deque.New[*searchNode](16) //TODO can we make this dynamic?
+	queue.PushBack(&searchNode{})
+	for queue.Len() != 0 {
+		curr := queue.PopFront()
+		for targetIdx := curr.stringTargetStartIdx; targetIdx < len(targets); targetIdx++ {
+			targetToAdd := targets[targetIdx]
+			for targetValue, count := range targetToAdd.values {
+				if !hasSupport(count, len(houses)) {
+					continue
+				}
+				log.Printf("Adding condition on %s to be equal to %s at Depth: %d\n",
+					targetToAdd.fieldName, targetValue, len(curr.conditions))
+				var newConditions []func(*HouseInfo) bool
+				if curr.conditions == nil {
+					newConditions = make([]func(*HouseInfo) bool, 0, 4) //TODO This should be max depth
+				} else {
+					newConditions = copyOf(curr.conditions)
+				}
+				newConditions = append(newConditions, getCondition(targetValue, targetToAdd))
+				nextNode := &searchNode{
+					conditions:           newConditions,
+					stringTargetStartIdx: targetIdx + 1,
+				}
+				nextNode.score = calculateCorrelation(houses, nextNode.conditions)
+				searchRes = append(searchRes, nextNode)
+				queue.PushBack(nextNode)
 			}
 		}
 	}
-	return info
 }
 
-func check(err error) {
-	if err != nil {
-		panic(err)
+func hasSupport(count, total int) bool {
+	return (float64(count) / float64(total)) > 0.01 //TODO Parameterize this
+}
+
+func copyOf[T any](slice []T) []T {
+	newSlice := make([]T, len(slice))
+	copy(newSlice, slice)
+	return newSlice
+}
+
+func getCondition(targetValue string, target *stringTarget) func(*HouseInfo) bool {
+	return func(h *HouseInfo) bool {
+		return reflect.ValueOf(h).Elem().FieldByName(target.fieldName).String() == targetValue
 	}
+}
+
+func calculateStringTargets(houses []*HouseInfo, fields []string) []*stringTarget {
+	stringTargets := make([]*stringTarget, len(fields))
+	for idx, field := range fields {
+		stringTargets[idx] = &stringTarget{fieldName: field, values: make(map[string]int)}
+	}
+
+	for _, house := range houses {
+		for idx, _ := range stringTargets {
+			value := reflect.ValueOf(house).Elem().FieldByName(stringTargets[idx].fieldName).String()
+			stringTargets[idx].values[value]++
+		}
+	}
+
+	return stringTargets
+}
+
+func calculateIntTargets(houses []*HouseInfo, fields []string) []*intTarget {
+	intTargets := make([]*intTarget, len(fields))
+	for idx, field := range fields {
+		intTargets[idx] = &intTarget{
+			fieldName: field,
+			counter:   make(map[int]int),
+			minVal:    -1,
+			maxVal:    1 << 30,
+		}
+	}
+
+	for _, house := range houses {
+		for idx, _ := range intTargets {
+			fieldVal := int(reflect.ValueOf(house).Elem().FieldByName(intTargets[idx].fieldName).Int())
+			intTargets[idx].counter[fieldVal]++
+			if fieldVal > intTargets[idx].minVal {
+				intTargets[idx].minVal = fieldVal
+			}
+			if fieldVal < intTargets[idx].maxVal {
+				intTargets[idx].maxVal = fieldVal
+			}
+		}
+	}
+	return intTargets
 }
