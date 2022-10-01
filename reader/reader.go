@@ -1,4 +1,4 @@
-package main
+package reader
 
 import (
 	"bufio"
@@ -75,14 +75,20 @@ func parseInfo(entry []string, headers []string) *HouseInfo {
 				fieldVal.SetString(entry[idx])
 			} else if kind == "int" {
 				val, err := strconv.ParseFloat(entry[idx], 64)
-				Check(err)
+				check(err)
 				fieldVal.SetInt(int64(val))
 			} else if kind == "float64" {
 				val, err := strconv.ParseFloat(entry[idx], 64)
-				Check(err)
+				check(err)
 				fieldVal.SetFloat(val)
 			}
 		}
 	}
 	return info
+}
+
+func check(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
