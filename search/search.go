@@ -5,6 +5,7 @@ package search
 
 import (
 	"container/heap"
+	"fmt"
 	"github.com/adityachandla/emmTrial/reader"
 	"github.com/gammazero/deque"
 	"log"
@@ -20,7 +21,8 @@ const (
 
 // TODO should I create a struct for all this?
 var (
-	houses []*reader.HouseInfo
+	processedCounter int
+	houses           []*reader.HouseInfo
 
 	stringTargets []*StringTarget
 	intTargets    []*IntTarget
@@ -31,23 +33,6 @@ var (
 	queue     *deque.Deque[*Node]
 	mutex     sync.Mutex
 )
-
-func addNode(node *Node) {
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	if _, present := seenNodes[node.Conditions.String()]; present {
-		return
-	}
-	queue.PushBack(node)
-	if nodeHeap.Len() < MaxLen {
-		heap.Push(nodeHeap, node)
-	} else if node.Score > (*nodeHeap)[0].Score {
-		heap.Pop(nodeHeap)
-		heap.Push(nodeHeap, node)
-	}
-	seenNodes[node.Conditions.String()] = struct{}{}
-}
 
 func initializeGlobalVariables(h []*reader.HouseInfo) {
 	houses = h
@@ -75,7 +60,7 @@ func BfsEvaluate(h []*reader.HouseInfo) *NodeHeap {
 			continue
 		}
 		wg := &sync.WaitGroup{}
-		wg.Add(3)
+		wg.Add(2)
 		go func() {
 			defer wg.Done()
 			processStringTargets(curr)
@@ -88,10 +73,7 @@ func BfsEvaluate(h []*reader.HouseInfo) *NodeHeap {
 			processIntTargetsLessThanEqual(curr)
 		}()
 		//and greater than equal conditions would be >=1, >=2,>=3
-		go func() {
-			defer wg.Done()
-			processIntTargetsGreaterThanEqual(curr)
-		}()
+		processIntTargetsGreaterThanEqual(curr)
 		wg.Wait()
 	}
 	return nodeHeap
@@ -108,12 +90,8 @@ func processStringTargets(curr *Node) {
 			}
 			newCondition := getStringEqualityCondition(targetToAdd.FieldName, targetValue)
 			nextNode := getNodeWithAddedCondition(newCondition, curr)
-			nextNode.stringTargetStartIdx++
-			nextNode.Score, nextNode.Size = CalculateCorrelation(houses, nextNode.Conditions)
-			nextNode.Score = math.Abs(nextNode.Score - baseScore)
-			if hasSupport(nextNode.Size, len(houses)) {
-				addNode(nextNode)
-			}
+			nextNode.stringTargetStartIdx = targetIdx + 1
+			processNode(nextNode)
 		}
 	}
 }
@@ -140,11 +118,8 @@ func processIntTargetsLessThanEqual(curr *Node) {
 			}
 			newCondition := getIntLessThanEqualCondition(targetToAdd.FieldName, i)
 			nextNode := getNodeWithAddedCondition(newCondition, curr)
-			nextNode.Score, nextNode.Size = CalculateCorrelation(houses, nextNode.Conditions)
-			nextNode.Score = math.Abs(nextNode.Score - baseScore)
-			if hasSupport(nextNode.Size, len(houses)) {
-				addNode(nextNode)
-			}
+			nextNode.intTargetStartIdx = targetIdx + 1
+			processNode(nextNode)
 		}
 	}
 }
@@ -171,11 +146,8 @@ func processIntTargetsGreaterThanEqual(curr *Node) {
 			}
 			newCondition := getIntGreaterThanEqualCondition(targetToAdd.FieldName, i)
 			nextNode := getNodeWithAddedCondition(newCondition, curr)
-			nextNode.Score, nextNode.Size = CalculateCorrelation(houses, nextNode.Conditions)
-			nextNode.Score = math.Abs(nextNode.Score - baseScore)
-			if hasSupport(nextNode.Size, len(houses)) {
-				addNode(nextNode)
-			}
+			nextNode.intTargetStartIdx = targetIdx + 1
+			processNode(nextNode)
 		}
 	}
 }
@@ -187,6 +159,33 @@ func getIntGreaterThanEqualCondition(name string, value int) *Condition {
 		Inequality:    GreaterThanEqual,
 		IsString:      false,
 	}
+}
+
+func processNode(nextNode *Node) {
+	nextNode.Correlation, nextNode.Size = CalculateCorrelation(houses, nextNode.Conditions)
+	nextNode.Score = math.Abs(nextNode.Correlation - baseScore)
+	if hasSupport(nextNode.Size, len(houses)) {
+		addNode(nextNode)
+	}
+}
+
+func addNode(node *Node) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	if _, present := seenNodes[node.Conditions.String()]; present {
+		return
+	}
+	queue.PushBack(node)
+	if nodeHeap.Len() < MaxLen {
+		heap.Push(nodeHeap, node)
+	} else if node.Score > (*nodeHeap)[0].Score {
+		heap.Pop(nodeHeap)
+		heap.Push(nodeHeap, node)
+	}
+	seenNodes[node.Conditions.String()] = struct{}{}
+	fmt.Printf("Added nodes : %d\r", processedCounter)
+	processedCounter++
 }
 
 func getNodeWithAddedCondition(condition *Condition, curr *Node) *Node {
