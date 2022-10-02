@@ -35,24 +35,44 @@ type Node struct {
 	Conditions           Conditions
 	Score                float64
 	Correlation          float64
+	SubgroupScore        float64
+	SubgroupWithin       string
 	Size                 int
 	stringTargetStartIdx int
 	intTargetStartIdx    int
 }
 
-// NodeHeap If we want to just get the top n results then we need to maintain a min
-// nodeHeap based on node scores
-type NodeHeap []*Node
+// ScoreHeap If we want to just get the top n results then we need to maintain a min
+// scoreHeap based on node scores
+type ScoreHeap []*Node
 
-func (h *NodeHeap) Len() int           { return len(*h) }
-func (h *NodeHeap) Less(i, j int) bool { return (*h)[i].Score < (*h)[j].Score }
-func (h *NodeHeap) Swap(i, j int)      { (*h)[i], (*h)[j] = (*h)[j], (*h)[i] }
+func (h *ScoreHeap) Len() int           { return len(*h) }
+func (h *ScoreHeap) Less(i, j int) bool { return (*h)[i].Score < (*h)[j].Score }
+func (h *ScoreHeap) Swap(i, j int)      { (*h)[i], (*h)[j] = (*h)[j], (*h)[i] }
 
-func (h *NodeHeap) Push(x any) {
+func (h *ScoreHeap) Push(x any) {
 	*h = append(*h, x.(*Node))
 }
 
-func (h *NodeHeap) Pop() any {
+func (h *ScoreHeap) Pop() any {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
+
+type SubgroupScoreHeap []*Node
+
+func (h *SubgroupScoreHeap) Len() int           { return len(*h) }
+func (h *SubgroupScoreHeap) Less(i, j int) bool { return (*h)[i].SubgroupScore < (*h)[j].SubgroupScore }
+func (h *SubgroupScoreHeap) Swap(i, j int)      { (*h)[i], (*h)[j] = (*h)[j], (*h)[i] }
+
+func (h *SubgroupScoreHeap) Push(x any) {
+	*h = append(*h, x.(*Node))
+}
+
+func (h *SubgroupScoreHeap) Pop() any {
 	old := *h
 	n := len(old)
 	x := old[n-1]

@@ -63,3 +63,26 @@ func isConditionValid(h *reader.HouseInfo, condition *Condition) bool {
 	}
 	return value.Int() <= int64(condition.FieldValueInt)
 }
+
+func getNodeWithAddedCondition(condition *Condition, curr *Node) *Node {
+	newConditions := copySlice(curr.Conditions)
+	newConditions = append(newConditions, condition)
+	return &Node{
+		Conditions:           newConditions,
+		stringTargetStartIdx: curr.stringTargetStartIdx,
+		intTargetStartIdx:    curr.intTargetStartIdx,
+	}
+}
+
+func copySlice[T any](slice []T) []T {
+	if slice == nil {
+		return make([]T, 0, Depth)
+	}
+	newSlice := make([]T, len(slice))
+	copy(newSlice, slice)
+	return newSlice
+}
+
+func hasSupport(count, total int) bool {
+	return (float64(count) / float64(total)) > MinSupport
+}

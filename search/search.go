@@ -14,24 +14,27 @@ import (
 )
 
 const (
-	Depth      int     = 4
+	Depth      int     = 3
 	MinSupport float64 = 0.01
-	MaxLen     int     = 40
+	MaxHeight  int     = 1
+	MaxLen     int     = 10
 )
 
-// TODO should I create a struct for all this?
 var (
 	processedCounter int
 	houses           []*reader.HouseInfo
 
+	//Target information
 	stringTargets []*StringTarget
 	intTargets    []*IntTarget
 
-	nodeHeap  *NodeHeap
-	baseScore float64
-	seenNodes map[string]struct{}
-	queue     *deque.Deque[*Node]
-	mutex     sync.Mutex
+	scoreHeap         *ScoreHeap          //Heap for top MaxLen nodes
+	subgroupScoreHeap *SubgroupScoreHeap  // Heap for storing score within subgroups
+	baseScore         float64             //Correlation in the entire dataset
+	seenNodes         map[string]struct{} //Nodes already seen
+	maxHeightNodes    map[string]*Node    //Nodes that are at height less than MaxHeight
+	queue             *deque.Deque[*Node] //BFS queue
+	mutex             sync.Mutex          //mutex to avoid race while adding to maps and queues
 )
 
 func initializeGlobalVariables(h []*reader.HouseInfo) {
@@ -42,13 +45,15 @@ func initializeGlobalVariables(h []*reader.HouseInfo) {
 	stringTargets = calculateStringTargets(houses)
 	intTargets = calculateIntTargets(houses)
 
-	nodeHeap = &NodeHeap{}
+	scoreHeap = &ScoreHeap{}
+	subgroupScoreHeap = &SubgroupScoreHeap{}
 	seenNodes = make(map[string]struct{})
+	maxHeightNodes = make(map[string]*Node)
 
 	queue = deque.New[*Node](16)
 }
 
-func BfsEvaluate(h []*reader.HouseInfo) *NodeHeap {
+func BfsEvaluate(h []*reader.HouseInfo) (*ScoreHeap, *SubgroupScoreHeap) {
 	initializeGlobalVariables(h)
 	//Start with no conditions
 	queue.PushBack(&Node{})
@@ -76,7 +81,7 @@ func BfsEvaluate(h []*reader.HouseInfo) *NodeHeap {
 		processIntTargetsGreaterThanEqual(curr)
 		wg.Wait()
 	}
-	return nodeHeap
+	return scoreHeap, subgroupScoreHeap
 }
 
 func processStringTargets(curr *Node) {
@@ -165,48 +170,61 @@ func processNode(nextNode *Node) {
 	nextNode.Correlation, nextNode.Size = CalculateCorrelation(houses, nextNode.Conditions)
 	nextNode.Score = math.Abs(nextNode.Correlation - baseScore)
 	if hasSupport(nextNode.Size, len(houses)) {
+		evaluateSubgroupScore(nextNode)
 		addNode(nextNode)
+	}
+}
+
+func evaluateSubgroupScore(nextNode *Node) {
+	for _, condition := range nextNode.Conditions {
+		node, contains := maxHeightNodes[condition.String()]
+		if !contains {
+			continue
+		}
+		correlationDiff := math.Abs(node.Correlation - nextNode.Correlation)
+		if correlationDiff > nextNode.SubgroupScore {
+			nextNode.SubgroupScore = correlationDiff
+			nextNode.SubgroupWithin = condition.String()
+		}
 	}
 }
 
 func addNode(node *Node) {
 	mutex.Lock()
 	defer mutex.Unlock()
-
 	if _, present := seenNodes[node.Conditions.String()]; present {
 		return
 	}
-	queue.PushBack(node)
-	if nodeHeap.Len() < MaxLen {
-		heap.Push(nodeHeap, node)
-	} else if node.Score > (*nodeHeap)[0].Score {
-		heap.Pop(nodeHeap)
-		heap.Push(nodeHeap, node)
+
+	if len(node.Conditions) <= MaxHeight {
+		maxHeightNodes[node.Conditions.String()] = node
 	}
+	queue.PushBack(node)
+	addToScoreHeap(node)
+	addToSubgroupHeap(node)
 	seenNodes[node.Conditions.String()] = struct{}{}
+
 	fmt.Printf("Added nodes : %d\r", processedCounter)
 	processedCounter++
 }
 
-func getNodeWithAddedCondition(condition *Condition, curr *Node) *Node {
-	newConditions := copySlice(curr.Conditions)
-	newConditions = append(newConditions, condition)
-	return &Node{
-		Conditions:           newConditions,
-		stringTargetStartIdx: curr.stringTargetStartIdx,
-		intTargetStartIdx:    curr.intTargetStartIdx,
+func addToScoreHeap(node *Node) {
+	if scoreHeap.Len() < MaxLen {
+		heap.Push(scoreHeap, node)
+	} else if node.Score > (*scoreHeap)[0].Score {
+		heap.Pop(scoreHeap)
+		heap.Push(scoreHeap, node)
 	}
 }
 
-func copySlice[T any](slice []T) []T {
-	if slice == nil {
-		return make([]T, 0, Depth)
+func addToSubgroupHeap(node *Node) {
+	if node.SubgroupScore == 0 {
+		return
 	}
-	newSlice := make([]T, len(slice))
-	copy(newSlice, slice)
-	return newSlice
-}
-
-func hasSupport(count, total int) bool {
-	return (float64(count) / float64(total)) > MinSupport
+	if subgroupScoreHeap.Len() < MaxLen {
+		heap.Push(subgroupScoreHeap, node)
+	} else if node.SubgroupScore > (*subgroupScoreHeap)[0].SubgroupScore {
+		heap.Pop(subgroupScoreHeap)
+		heap.Push(subgroupScoreHeap, node)
+	}
 }
