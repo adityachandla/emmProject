@@ -18,7 +18,6 @@ type StringTarget struct {
 }
 
 var (
-	//intFields    = []string{"Bedrooms", "Bathrooms", "Car", "Rooms"}
 	intFields    = []string{"Car", "Rooms"}
 	stringFields = []string{"HouseType", "Suburb"}
 )

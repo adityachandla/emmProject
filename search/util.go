@@ -19,7 +19,7 @@ func CalculateCorrelation(houses []*reader.HouseInfo, filterConditions []*Condit
 
 	var sumProduct float64
 	for _, house := range houses {
-		if !shouldEvaluate(house, filterConditions) {
+		if !shouldEvaluateHouse(house, filterConditions) {
 			continue
 		}
 		count++
@@ -39,7 +39,7 @@ func CalculateCorrelation(houses []*reader.HouseInfo, filterConditions []*Condit
 	return numerator / denominator, count
 }
 
-func shouldEvaluate(h *reader.HouseInfo, conditions Conditions) bool {
+func shouldEvaluateHouse(h *reader.HouseInfo, conditions Conditions) bool {
 	if conditions == nil {
 		return true
 	}

@@ -9,8 +9,14 @@ import (
 	"strings"
 )
 
+const filename = "melb_data.csv"
+
 var tagToFieldNameMapping map[string]string
 
+//HouseInfo contains all the fields of our dataset.
+//The csv tag is used to have a mapping of what the
+//field is called in csv file and what we want the
+//name to be.
 type HouseInfo struct {
 	Suburb         string  `csv:"Suburb"`
 	Rooms          int     `csv:"Rooms"`
@@ -41,7 +47,7 @@ func initMapping() {
 
 func ReadHouses() []*HouseInfo {
 	initMapping()
-	file, _ := os.Open("melb_data.csv")
+	file, _ := os.Open(filename)
 	reader := bufio.NewReader(file)
 
 	line, _, _ := reader.ReadLine()
@@ -52,8 +58,8 @@ func ReadHouses() []*HouseInfo {
 	line, _, err := reader.ReadLine()
 	for err == nil {
 		entry := strings.Split(string(line), ",")
-		HouseInfo := parseInfo(entry, headers)
-		houses = append(houses, HouseInfo)
+		houseInfo := parseInfo(entry, headers)
+		houses = append(houses, houseInfo)
 		line, _, err = reader.ReadLine()
 	}
 	return houses

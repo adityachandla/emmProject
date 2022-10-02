@@ -18,7 +18,7 @@ const (
 	MaxLen     int     = 40
 )
 
-// TODO Create a struct for all this
+// TODO should I create a struct for all this?
 var (
 	houses []*reader.HouseInfo
 
@@ -49,7 +49,7 @@ func addNode(node *Node) {
 	seenNodes[node.Conditions.String()] = struct{}{}
 }
 
-func BfsEvaluate(h []*reader.HouseInfo) *NodeHeap {
+func initializeGlobalVariables(h []*reader.HouseInfo) {
 	houses = h
 	baseScore, _ = CalculateCorrelation(houses, nil)
 	log.Printf("Base score is %f", baseScore)
@@ -61,6 +61,11 @@ func BfsEvaluate(h []*reader.HouseInfo) *NodeHeap {
 	seenNodes = make(map[string]struct{})
 
 	queue = deque.New[*Node](16)
+}
+
+func BfsEvaluate(h []*reader.HouseInfo) *NodeHeap {
+	initializeGlobalVariables(h)
+	//Start with no conditions
 	queue.PushBack(&Node{})
 	for queue.Len() != 0 {
 		curr := queue.PopFront()
@@ -101,26 +106,24 @@ func processStringTargets(curr *Node) {
 			if !hasSupport(count, len(houses)) {
 				continue
 			}
-			newConditions := copySlice(curr.Conditions)
-			newConditions = append(newConditions, &Condition{
-				IsString:         true,
-				FieldName:        targetToAdd.FieldName,
-				FieldValueString: targetValue,
-				Inequality:       Equal, //We process the string targets only for equality.
-			})
-			nextNode := &Node{
-				Conditions:           newConditions,
-				stringTargetStartIdx: targetIdx + 1,
-				intTargetStartIdx:    curr.intTargetStartIdx,
-			}
-			var size int
-			nextNode.Score, size = CalculateCorrelation(houses, nextNode.Conditions)
+			newCondition := getStringEqualityCondition(targetToAdd.FieldName, targetValue)
+			nextNode := getNodeWithAddedCondition(newCondition, curr)
+			nextNode.stringTargetStartIdx++
+			nextNode.Score, nextNode.Size = CalculateCorrelation(houses, nextNode.Conditions)
 			nextNode.Score = math.Abs(nextNode.Score - baseScore)
-			nextNode.Size = size
-			if hasSupport(size, len(houses)) {
+			if hasSupport(nextNode.Size, len(houses)) {
 				addNode(nextNode)
 			}
 		}
+	}
+}
+
+func getStringEqualityCondition(name, value string) *Condition {
+	return &Condition{
+		IsString:         true,
+		FieldName:        name,
+		FieldValueString: value,
+		Inequality:       Equal,
 	}
 }
 
@@ -135,27 +138,23 @@ func processIntTargetsLessThanEqual(curr *Node) {
 			if !hasSupport(frequency, len(houses)) {
 				continue
 			}
-			//less than equal
-			newConditions := copySlice(curr.Conditions)
-			newConditions = append(newConditions, &Condition{
-				FieldName:     targetToAdd.FieldName,
-				FieldValueInt: i,
-				Inequality:    LessThanEqual,
-				IsString:      false,
-			})
-			nextNode := &Node{
-				intTargetStartIdx:    targetIdx + 1,
-				stringTargetStartIdx: curr.stringTargetStartIdx,
-				Conditions:           newConditions,
-			}
-			var size int
-			nextNode.Score, size = CalculateCorrelation(houses, newConditions)
+			newCondition := getIntLessThanEqualCondition(targetToAdd.FieldName, i)
+			nextNode := getNodeWithAddedCondition(newCondition, curr)
+			nextNode.Score, nextNode.Size = CalculateCorrelation(houses, nextNode.Conditions)
 			nextNode.Score = math.Abs(nextNode.Score - baseScore)
-			nextNode.Size = size
-			if hasSupport(size, len(houses)) {
+			if hasSupport(nextNode.Size, len(houses)) {
 				addNode(nextNode)
 			}
 		}
+	}
+}
+
+func getIntLessThanEqualCondition(name string, value int) *Condition {
+	return &Condition{
+		FieldName:     name,
+		FieldValueInt: value,
+		Inequality:    LessThanEqual,
+		IsString:      false,
 	}
 }
 
@@ -170,26 +169,33 @@ func processIntTargetsGreaterThanEqual(curr *Node) {
 			if !hasSupport(frequency, len(houses)) {
 				continue
 			}
-			newConditions := copySlice(curr.Conditions)
-			newConditions = append(newConditions, &Condition{
-				FieldName:     targetToAdd.FieldName,
-				FieldValueInt: i,
-				Inequality:    GreaterThanEqual,
-				IsString:      false,
-			})
-			nextNode := &Node{
-				intTargetStartIdx:    targetIdx + 1,
-				stringTargetStartIdx: curr.stringTargetStartIdx,
-				Conditions:           newConditions,
-			}
-			var size int
-			nextNode.Score, size = CalculateCorrelation(houses, newConditions)
+			newCondition := getIntGreaterThanEqualCondition(targetToAdd.FieldName, i)
+			nextNode := getNodeWithAddedCondition(newCondition, curr)
+			nextNode.Score, nextNode.Size = CalculateCorrelation(houses, nextNode.Conditions)
 			nextNode.Score = math.Abs(nextNode.Score - baseScore)
-			nextNode.Size = size
-			if hasSupport(size, len(houses)) {
+			if hasSupport(nextNode.Size, len(houses)) {
 				addNode(nextNode)
 			}
 		}
+	}
+}
+
+func getIntGreaterThanEqualCondition(name string, value int) *Condition {
+	return &Condition{
+		FieldName:     name,
+		FieldValueInt: value,
+		Inequality:    GreaterThanEqual,
+		IsString:      false,
+	}
+}
+
+func getNodeWithAddedCondition(condition *Condition, curr *Node) *Node {
+	newConditions := copySlice(curr.Conditions)
+	newConditions = append(newConditions, condition)
+	return &Node{
+		Conditions:           newConditions,
+		stringTargetStartIdx: curr.stringTargetStartIdx,
+		intTargetStartIdx:    curr.intTargetStartIdx,
 	}
 }
 
