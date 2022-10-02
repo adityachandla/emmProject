@@ -10,7 +10,6 @@ import (
 // It is a modified version of https://www.geeksforgeeks.org/program-find-correlation-coefficient/
 func CalculateCorrelation(houses []*reader.HouseInfo, filterConditions []*Condition) (float64, int) {
 	count := 0
-	n := float64(len(houses))
 
 	var sumX float64
 	var sumY float64
@@ -24,7 +23,7 @@ func CalculateCorrelation(houses []*reader.HouseInfo, filterConditions []*Condit
 			continue
 		}
 		count++
-		x := house.BuildingArea
+		x := house.LandSize
 		y := float64(house.Price)
 		sumX += x
 		squareSumX += x * x
@@ -34,9 +33,9 @@ func CalculateCorrelation(houses []*reader.HouseInfo, filterConditions []*Condit
 
 		sumProduct += x * y
 	}
-	numerator := (n * sumProduct) - (sumX * sumY)
-	denominator := math.Sqrt((n*squareSumX - (sumX * sumX)) *
-		(n*squareSumY - (sumY * sumY)))
+	numerator := (float64(count) * sumProduct) - (sumX * sumY)
+	denominator := math.Sqrt((float64(count)*squareSumX - (sumX * sumX)) *
+		(float64(count)*squareSumY - (sumY * sumY)))
 	return numerator / denominator, count
 }
 

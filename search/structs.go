@@ -34,8 +34,29 @@ func (i inequality) String() string {
 type Node struct {
 	Conditions           Conditions
 	Score                float64
+	Size                 int
 	stringTargetStartIdx int
 	intTargetStartIdx    int
+}
+
+// NodeHeap If we want to just get the top n results then we need to maintain a min
+// nodeHeap based on node scores
+type NodeHeap []*Node
+
+func (h *NodeHeap) Len() int           { return len(*h) }
+func (h *NodeHeap) Less(i, j int) bool { return (*h)[i].Score < (*h)[j].Score }
+func (h *NodeHeap) Swap(i, j int)      { (*h)[i], (*h)[j] = (*h)[j], (*h)[i] }
+
+func (h *NodeHeap) Push(x any) {
+	*h = append(*h, x.(*Node))
+}
+
+func (h *NodeHeap) Pop() any {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
 }
 
 // Condition defines the inequality that we need to evaluate for the node.

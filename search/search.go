@@ -4,32 +4,63 @@
 package search
 
 import (
+	"container/heap"
 	"github.com/adityachandla/emmTrial/reader"
 	"github.com/gammazero/deque"
+	"log"
+	"math"
+	"sync"
 )
 
 const (
-	Depth      int     = 3
-	MinSupport float64 = 0.1
+	Depth      int     = 4
+	MinSupport float64 = 0.01
+	MaxLen     int     = 40
 )
 
+// TODO Create a struct for all this
 var (
+	houses []*reader.HouseInfo
+
 	stringTargets []*StringTarget
 	intTargets    []*IntTarget
 
-	searchRes map[string]*Node
-	houses    []*reader.HouseInfo
+	nodeHeap  *NodeHeap
+	baseScore float64
+	seenNodes map[string]struct{}
+	queue     *deque.Deque[*Node]
+	mutex     sync.Mutex
 )
 
-func BfsEvaluate(h []*reader.HouseInfo) map[string]*Node {
+func addNode(node *Node) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	if _, present := seenNodes[node.Conditions.String()]; present {
+		return
+	}
+	queue.PushBack(node)
+	if nodeHeap.Len() < MaxLen {
+		heap.Push(nodeHeap, node)
+	} else if node.Score > (*nodeHeap)[0].Score {
+		heap.Pop(nodeHeap)
+		heap.Push(nodeHeap, node)
+	}
+	seenNodes[node.Conditions.String()] = struct{}{}
+}
+
+func BfsEvaluate(h []*reader.HouseInfo) *NodeHeap {
 	houses = h
+	baseScore, _ = CalculateCorrelation(houses, nil)
+	log.Printf("Base score is %f", baseScore)
 
 	stringTargets = calculateStringTargets(houses)
 	intTargets = calculateIntTargets(houses)
 
-	searchRes = make(map[string]*Node)
+	nodeHeap = &NodeHeap{}
+	seenNodes = make(map[string]struct{})
 
-	queue := deque.New[*Node](16)
+	queue = deque.New[*Node](16)
 	queue.PushBack(&Node{})
 	for queue.Len() != 0 {
 		curr := queue.PopFront()
@@ -38,18 +69,30 @@ func BfsEvaluate(h []*reader.HouseInfo) map[string]*Node {
 		if len(curr.Conditions) == Depth {
 			continue
 		}
-		processStringTargets(curr, queue)
+		wg := &sync.WaitGroup{}
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			processStringTargets(curr)
+		}()
 		//We process strings in both increasing and decreasing order
 		//So if we have 1,2,3 for a field then less than equal
 		//conditions would be <=1, <=2, <=3
-		processIntTargetsLessThanEqual(curr, queue)
+		go func() {
+			defer wg.Done()
+			processIntTargetsLessThanEqual(curr)
+		}()
 		//and greater than equal conditions would be >=1, >=2,>=3
-		processIntTargetsGreaterThanEqual(curr, queue)
+		go func() {
+			defer wg.Done()
+			processIntTargetsGreaterThanEqual(curr)
+		}()
+		wg.Wait()
 	}
-	return searchRes
+	return nodeHeap
 }
 
-func processStringTargets(curr *Node, queue *deque.Deque[*Node]) {
+func processStringTargets(curr *Node) {
 	for targetIdx := curr.stringTargetStartIdx; targetIdx < len(stringTargets); targetIdx++ {
 		targetToAdd := stringTargets[targetIdx]
 		for targetValue, count := range targetToAdd.Values {
@@ -72,22 +115,22 @@ func processStringTargets(curr *Node, queue *deque.Deque[*Node]) {
 			}
 			var size int
 			nextNode.Score, size = CalculateCorrelation(houses, nextNode.Conditions)
-			if !hasSupport(size, len(houses)) {
-				continue
+			nextNode.Score = math.Abs(nextNode.Score - baseScore)
+			nextNode.Size = size
+			if hasSupport(size, len(houses)) {
+				addNode(nextNode)
 			}
-			searchRes[nextNode.Conditions.String()] = nextNode
-			queue.PushBack(nextNode)
 		}
 	}
 }
 
-func processIntTargetsLessThanEqual(curr *Node, queue *deque.Deque[*Node]) {
+func processIntTargetsLessThanEqual(curr *Node) {
 	for targetIdx := curr.intTargetStartIdx; targetIdx < len(intTargets); targetIdx++ {
 		targetToAdd := intTargets[targetIdx]
 		//go from start to end accumulating count and only branch out when
 		//count is greater than minimum support
 		frequency := 0
-		for i := targetToAdd.MinVal + 1; i <= targetToAdd.MaxVal; i += 2 {
+		for i := targetToAdd.MinVal + 1; i <= targetToAdd.MaxVal-1; i += 2 {
 			frequency += targetToAdd.Counter[i] + targetToAdd.Counter[i-1]
 			if !hasSupport(frequency, len(houses)) {
 				continue
@@ -107,22 +150,22 @@ func processIntTargetsLessThanEqual(curr *Node, queue *deque.Deque[*Node]) {
 			}
 			var size int
 			nextNode.Score, size = CalculateCorrelation(houses, newConditions)
-			if !hasSupport(size, len(houses)) {
-				continue
+			nextNode.Score = math.Abs(nextNode.Score - baseScore)
+			nextNode.Size = size
+			if hasSupport(size, len(houses)) {
+				addNode(nextNode)
 			}
-			queue.PushBack(nextNode)
-			searchRes[nextNode.Conditions.String()] = nextNode
 		}
 	}
 }
 
-func processIntTargetsGreaterThanEqual(curr *Node, queue *deque.Deque[*Node]) {
+func processIntTargetsGreaterThanEqual(curr *Node) {
 	for targetIdx := curr.intTargetStartIdx; targetIdx < len(intTargets); targetIdx++ {
 		targetToAdd := intTargets[targetIdx]
 		//go from end to start and only branch out when
 		//count is greater than minimum support
 		frequency := 0
-		for i := targetToAdd.MaxVal - 1; i >= targetToAdd.MinVal; i-- {
+		for i := targetToAdd.MaxVal - 1; i >= targetToAdd.MinVal+1; i-- {
 			frequency += targetToAdd.Counter[i] + targetToAdd.Counter[i+1]
 			if !hasSupport(frequency, len(houses)) {
 				continue
@@ -141,11 +184,11 @@ func processIntTargetsGreaterThanEqual(curr *Node, queue *deque.Deque[*Node]) {
 			}
 			var size int
 			nextNode.Score, size = CalculateCorrelation(houses, newConditions)
-			if !hasSupport(size, len(houses)) {
-				continue
+			nextNode.Score = math.Abs(nextNode.Score - baseScore)
+			nextNode.Size = size
+			if hasSupport(size, len(houses)) {
+				addNode(nextNode)
 			}
-			queue.PushBack(nextNode)
-			searchRes[nextNode.Conditions.String()] = nextNode
 		}
 	}
 }
