@@ -19,7 +19,7 @@ type StringTarget struct {
 
 var (
 	intFields    = []string{"Car", "Rooms"}
-	stringFields = []string{"HouseType", "Suburb"}
+	stringFields = []string{"HouseType", "Suburb", "SellerName"}
 )
 
 // We calculate the various values of string fields as well as the count of

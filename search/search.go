@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	Depth      int     = 3
-	MinSupport float64 = 0.01
+	Depth      int     = 4
+	MinSupport float64 = 0.05
 	MaxHeight  int     = 1
 	MaxLen     int     = 10
 )
