@@ -14,7 +14,7 @@ import (
 
 const (
 	Depth      int     = 4
-	MinSupport float64 = 0.05
+	MinSupport float64 = 0.01
 	MaxLen     int     = 10
 	NumWorkers int     = 8
 )
@@ -69,9 +69,11 @@ func BfsEvaluate(h []*reader.HouseInfo) *NodeHeap {
 
 func worker(input <-chan *Node, output chan<- *Node) {
 	for curr := range input {
-		processStringTargets(curr, output)
-		processIntTargetsLessThanEqual(curr, output)
-		processIntTargetsGreaterThanEqual(curr, output)
+		if curr != nil {
+			processStringTargets(curr, output)
+			processIntTargetsLessThanEqual(curr, output)
+			processIntTargetsGreaterThanEqual(curr, output)
+		}
 	}
 }
 
