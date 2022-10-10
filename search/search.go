@@ -5,7 +5,6 @@ package search
 
 import (
 	"container/heap"
-	"fmt"
 	"github.com/adityachandla/emmTrial/reader"
 	"github.com/gammazero/deque"
 	"log"
@@ -15,23 +14,18 @@ import (
 
 const (
 	Depth      int     = 4
-	MinSupport float64 = 0.01
-	MaxLen     int     = 40
+	MinSupport float64 = 0.05
+	MaxLen     int     = 10
+	NumWorkers int     = 8
 )
 
-// TODO should I create a struct for all this?
 var (
-	processedCounter int
-	houses           []*reader.HouseInfo
+	houses []*reader.HouseInfo
 
 	stringTargets []*StringTarget
 	intTargets    []*IntTarget
 
-	nodeHeap  *NodeHeap
 	baseScore float64
-	seenNodes map[string]struct{}
-	queue     *deque.Deque[*Node]
-	mutex     sync.Mutex
 )
 
 func initializeGlobalVariables(h []*reader.HouseInfo) {
@@ -41,45 +35,64 @@ func initializeGlobalVariables(h []*reader.HouseInfo) {
 
 	stringTargets = calculateStringTargets(houses)
 	intTargets = calculateIntTargets(houses)
-
-	nodeHeap = &NodeHeap{}
-	seenNodes = make(map[string]struct{})
-
-	queue = deque.New[*Node](16)
 }
 
 func BfsEvaluate(h []*reader.HouseInfo) *NodeHeap {
 	initializeGlobalVariables(h)
-	//Start with no conditions
+	queue := deque.Deque[*Node]{}
+	nodeHeap := &NodeHeap{}
 	queue.PushBack(&Node{})
-	for queue.Len() != 0 {
-		curr := queue.PopFront()
-		//The number of Conditions denotes the depth.
-		//If we have more Conditions than the depth then we can stop
-		if len(curr.Conditions) == Depth {
-			continue
+	for depth := 0; depth <= Depth && queue.Len() > 0; depth++ {
+		log.Println("Processing level ", depth)
+		outputChannel := make(chan *Node, 5_000)
+		inputChannel := make(chan *Node, NumWorkers)
+		wg := sync.WaitGroup{}
+		wg.Add(NumWorkers)
+		for i := 0; i < NumWorkers; i++ {
+			go func() {
+				defer wg.Done()
+				worker(inputChannel, outputChannel)
+			}()
 		}
-		wg := &sync.WaitGroup{}
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			processStringTargets(curr)
-		}()
-		//We process strings in both increasing and decreasing order
-		//So if we have 1,2,3 for a field then less than equal
-		//conditions would be <=1, <=2, <=3
-		go func() {
-			defer wg.Done()
-			processIntTargetsLessThanEqual(curr)
-		}()
-		//and greater than equal conditions would be >=1, >=2,>=3
-		processIntTargetsGreaterThanEqual(curr)
+		go processLevel(outputChannel, &queue, nodeHeap)
+		for queue.Len() > 0 {
+			node := queue.PopBack()
+			inputChannel <- node
+		}
+		close(inputChannel)
 		wg.Wait()
+		close(outputChannel)
 	}
+
 	return nodeHeap
 }
 
-func processStringTargets(curr *Node) {
+func worker(input <-chan *Node, output chan<- *Node) {
+	for curr := range input {
+		processStringTargets(curr, output)
+		processIntTargetsLessThanEqual(curr, output)
+		processIntTargetsGreaterThanEqual(curr, output)
+	}
+}
+
+func processLevel(outputChannel <-chan *Node, queue *deque.Deque[*Node], nodeHeap *NodeHeap) {
+	seenNodes := make(map[string]struct{})
+	for node := range outputChannel {
+		if _, present := seenNodes[node.Conditions.String()]; present {
+			continue
+		}
+		queue.PushBack(node)
+		if nodeHeap.Len() < MaxLen {
+			heap.Push(nodeHeap, node)
+		} else if node.Score > (*nodeHeap)[0].Score {
+			heap.Pop(nodeHeap)
+			heap.Push(nodeHeap, node)
+		}
+		seenNodes[node.Conditions.String()] = struct{}{}
+	}
+}
+
+func processStringTargets(curr *Node, outputChannel chan<- *Node) {
 	for targetIdx := curr.stringTargetStartIdx; targetIdx < len(stringTargets); targetIdx++ {
 		targetToAdd := stringTargets[targetIdx]
 		for targetValue, count := range targetToAdd.Values {
@@ -91,7 +104,7 @@ func processStringTargets(curr *Node) {
 			newCondition := getStringEqualityCondition(targetToAdd.FieldName, targetValue)
 			nextNode := getNodeWithAddedCondition(newCondition, curr)
 			nextNode.stringTargetStartIdx = targetIdx + 1
-			processNode(nextNode)
+			processNode(nextNode, outputChannel)
 		}
 	}
 }
@@ -105,7 +118,7 @@ func getStringEqualityCondition(name, value string) *Condition {
 	}
 }
 
-func processIntTargetsLessThanEqual(curr *Node) {
+func processIntTargetsLessThanEqual(curr *Node, outputChannel chan<- *Node) {
 	for targetIdx := curr.intTargetStartIdx; targetIdx < len(intTargets); targetIdx++ {
 		targetToAdd := intTargets[targetIdx]
 		//go from start to end accumulating count and only branch out when
@@ -119,7 +132,7 @@ func processIntTargetsLessThanEqual(curr *Node) {
 			newCondition := getIntLessThanEqualCondition(targetToAdd.FieldName, i)
 			nextNode := getNodeWithAddedCondition(newCondition, curr)
 			nextNode.intTargetStartIdx = targetIdx + 1
-			processNode(nextNode)
+			processNode(nextNode, outputChannel)
 		}
 	}
 }
@@ -133,7 +146,7 @@ func getIntLessThanEqualCondition(name string, value int) *Condition {
 	}
 }
 
-func processIntTargetsGreaterThanEqual(curr *Node) {
+func processIntTargetsGreaterThanEqual(curr *Node, outputChannel chan<- *Node) {
 	for targetIdx := curr.intTargetStartIdx; targetIdx < len(intTargets); targetIdx++ {
 		targetToAdd := intTargets[targetIdx]
 		//go from end to start and only branch out when
@@ -147,7 +160,7 @@ func processIntTargetsGreaterThanEqual(curr *Node) {
 			newCondition := getIntGreaterThanEqualCondition(targetToAdd.FieldName, i)
 			nextNode := getNodeWithAddedCondition(newCondition, curr)
 			nextNode.intTargetStartIdx = targetIdx + 1
-			processNode(nextNode)
+			processNode(nextNode, outputChannel)
 		}
 	}
 }
@@ -161,31 +174,12 @@ func getIntGreaterThanEqualCondition(name string, value int) *Condition {
 	}
 }
 
-func processNode(nextNode *Node) {
+func processNode(nextNode *Node, outputChannel chan<- *Node) {
 	nextNode.Correlation, nextNode.Size = CalculateCorrelation(houses, nextNode.Conditions)
 	nextNode.Score = math.Abs(nextNode.Correlation - baseScore)
 	if hasSupport(nextNode.Size, len(houses)) {
-		addNode(nextNode)
+		outputChannel <- nextNode
 	}
-}
-
-func addNode(node *Node) {
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	if _, present := seenNodes[node.Conditions.String()]; present {
-		return
-	}
-	queue.PushBack(node)
-	if nodeHeap.Len() < MaxLen {
-		heap.Push(nodeHeap, node)
-	} else if node.Score > (*nodeHeap)[0].Score {
-		heap.Pop(nodeHeap)
-		heap.Push(nodeHeap, node)
-	}
-	seenNodes[node.Conditions.String()] = struct{}{}
-	fmt.Printf("Added nodes : %d\r", processedCounter)
-	processedCounter++
 }
 
 func getNodeWithAddedCondition(condition *Condition, curr *Node) *Node {
