@@ -35,6 +35,7 @@ type Node struct {
 	Conditions           Conditions
 	Score                float64
 	Correlation          float64
+	CorrelationComp 	 float64
 	Size                 int
 	stringTargetStartIdx int
 	intTargetStartIdx    int
