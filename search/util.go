@@ -8,7 +8,7 @@ import (
 
 // CalculateCorrelation is a single pass correlation calculation
 // It is a modified version of https://www.geeksforgeeks.org/program-find-correlation-coefficient/
-func CalculateCorrelation(houses []*reader.HouseInfo, filterConditions []*Condition) (float64, int) {
+func CalculateCorrelation(houses []*reader.HouseInfo, filterConditions []*Condition, calculateComplement bool) (float64, int) {
 	count := 0
 
 	var sumX float64
@@ -19,38 +19,7 @@ func CalculateCorrelation(houses []*reader.HouseInfo, filterConditions []*Condit
 
 	var sumProduct float64
 	for _, house := range houses {
-		if !shouldEvaluateHouse(house, filterConditions) {
-			continue
-		}
-		count++
-		x := house.LandSize
-		y := float64(house.Price)
-		sumX += x
-		squareSumX += x * x
-
-		sumY += y
-		squareSumY += y * y
-
-		sumProduct += x * y
-	}
-	numerator := (float64(count) * sumProduct) - (sumX * sumY)
-	denominator := math.Sqrt((float64(count)*squareSumX - (sumX * sumX)) *
-		(float64(count)*squareSumY - (sumY * sumY)))
-	return numerator / denominator, count
-}
-
-func CalculateComplementCorrelation(houses []*reader.HouseInfo, filterConditions []*Condition) (float64, int) {
-	count := 0
-
-	var sumX float64
-	var sumY float64
-
-	var squareSumX float64
-	var squareSumY float64
-
-	var sumProduct float64
-	for _, house := range houses {
-		if shouldEvaluateHouse(house, filterConditions) {
+		if calculateComplement == shouldEvaluateHouse(house, filterConditions) {
 			continue
 		}
 		count++
