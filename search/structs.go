@@ -32,24 +32,25 @@ func (i inequality) String() string {
 // Node contains all the fields required to evaluate the score for
 // the current node as well as to further branch.
 type Node struct {
-	Conditions            Conditions
-	Score                 float64
-	ScoreComplement       float64
-	Correlation           float64
-	CorrelationComplement float64
-	Size                  int
-	SizeComplement        int
-	stringTargetStartIdx  int
-	intTargetStartIdx     int
+	Conditions           Conditions
+	Score                float64
+	ScoreComplement      float64
+	ScoreDifference      float64
+	Correlation          float64
+	Size                 int
+	stringTargetStartIdx int
+	intTargetStartIdx    int
 }
 
 // NodeHeap If we want to just get the top n results then we need to maintain a min
 // nodeHeap based on node scores
 type NodeHeap []*Node
 
-func (h *NodeHeap) Len() int           { return len(*h) }
-func (h *NodeHeap) Less(i, j int) bool { return (*h)[i].Score < (*h)[j].Score }
-func (h *NodeHeap) Swap(i, j int)      { (*h)[i], (*h)[j] = (*h)[j], (*h)[i] }
+func (h *NodeHeap) Len() int { return len(*h) }
+func (h *NodeHeap) Less(i, j int) bool {
+	return (*h)[i].ScoreDifference < (*h)[j].ScoreDifference
+}
+func (h *NodeHeap) Swap(i, j int) { (*h)[i], (*h)[j] = (*h)[j], (*h)[i] }
 
 func (h *NodeHeap) Push(x any) {
 	*h = append(*h, x.(*Node))

@@ -6,11 +6,12 @@ package search
 import (
 	"container/heap"
 	"fmt"
-	"github.com/adityachandla/emmTrial/reader"
-	"github.com/gammazero/deque"
 	"log"
 	"math"
 	"sync"
+
+	"github.com/adityachandla/emmTrial/reader"
+	"github.com/gammazero/deque"
 )
 
 const (
@@ -163,9 +164,10 @@ func getIntGreaterThanEqualCondition(name string, value int) *Condition {
 
 func processNode(nextNode *Node) {
 	nextNode.Correlation, nextNode.Size = CalculateCorrelation(houses, nextNode.Conditions)
-	nextNode.CorrelationComplement, nextNode.SizeComplement = CalculateCorrelationComplement(houses, nextNode.Conditions)
-	nextNode.ScoreComplement = math.Abs(nextNode.CorrelationComplement - nextNode.Correlation)
+	correlationComplement, _ := CalculateCorrelationComplement(houses, nextNode.Conditions)
+	nextNode.ScoreComplement = math.Abs(correlationComplement - nextNode.Correlation)
 	nextNode.Score = math.Abs(nextNode.Correlation - baseScore)
+	nextNode.ScoreDifference = math.Abs(nextNode.Score - nextNode.ScoreComplement)
 	if hasSupport(nextNode.Size, len(houses)) {
 		addNode(nextNode)
 	}
