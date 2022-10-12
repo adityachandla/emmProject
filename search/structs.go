@@ -32,12 +32,15 @@ func (i inequality) String() string {
 // Node contains all the fields required to evaluate the score for
 // the current node as well as to further branch.
 type Node struct {
-	Conditions           Conditions
-	Score                float64
-	Correlation          float64
-	Size                 int
-	stringTargetStartIdx int
-	intTargetStartIdx    int
+	Conditions            Conditions
+	Score                 float64
+	ScoreComplement       float64
+	Correlation           float64
+	CorrelationComplement float64
+	Size                  int
+	SizeComplement        int
+	stringTargetStartIdx  int
+	intTargetStartIdx     int
 }
 
 // NodeHeap If we want to just get the top n results then we need to maintain a min

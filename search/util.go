@@ -39,6 +39,37 @@ func CalculateCorrelation(houses []*reader.HouseInfo, filterConditions []*Condit
 	return numerator / denominator, count
 }
 
+func CalculateCorrelationComplement(houses []*reader.HouseInfo, filterConditions []*Condition) (float64, int) {
+	count := 0
+
+	var sumX float64
+	var sumY float64
+
+	var squareSumX float64
+	var squareSumY float64
+
+	var sumProduct float64
+	for _, house := range houses {
+		if shouldEvaluateHouse(house, filterConditions) {
+			continue
+		}
+		count++
+		x := house.LandSize
+		y := float64(house.Price)
+		sumX += x
+		squareSumX += x * x
+
+		sumY += y
+		squareSumY += y * y
+
+		sumProduct += x * y
+	}
+	numerator := (float64(count) * sumProduct) - (sumX * sumY)
+	denominator := math.Sqrt((float64(count)*squareSumX - (sumX * sumX)) *
+		(float64(count)*squareSumY - (sumY * sumY)))
+	return numerator / denominator, count
+}
+
 func shouldEvaluateHouse(h *reader.HouseInfo, conditions Conditions) bool {
 	if conditions == nil {
 		return true
