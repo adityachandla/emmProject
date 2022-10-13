@@ -36,6 +36,7 @@ type Node struct {
 	Score                float64
 	ScoreComplement      float64
 	ScoreDifference      float64
+	ScoreRelative        float64
 	Correlation          float64
 	Size                 int
 	stringTargetStartIdx int
