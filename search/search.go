@@ -162,9 +162,19 @@ func getIntGreaterThanEqualCondition(name string, value int) *Condition {
 }
 
 func processNode(nextNode *Node) {
+	// Calculate correlations of the node (node vs dataset and complement vs dataset)
 	nextNode.Correlation, nextNode.Size = CalculateCorrelation(houses, nextNode.Conditions, false)
-	nextNode.CorrelationComp, _ = CalculateCorrelation(houses, nextNode.Conditions, true)
-	nextNode.Score = math.Abs(float64(nextNode.Size / len(houses)) * nextNode.CorrelationComp + float64(1 - nextNode.Size / len(houses)) * nextNode.Correlation - baseScore)
+	nextNode.CorrelationComplement, _ = CalculateCorrelation(houses, nextNode.Conditions, true)
+
+	// Calculated scorings of the nodes
+	nextNode.Score = math.Abs(nextNode.Correlation - baseScore)
+	nextNode.ScoreComplement = math.Abs(nextNode.CorrelationComplement - baseScore)
+	fraction := float64(nextNode.Size) / float64(len(houses))
+	nextNode.ScoreCombined = math.Abs(fraction * nextNode.CorrelationComplement + (1 - fraction) * nextNode.Correlation - baseScore)
+
+	// Calculate the difference
+	nextNode.ScoreDifference = math.Abs(nextNode.ScoreCombined - nextNode.Score)
+
 	if hasSupport(nextNode.Size, len(houses)) {
 		addNode(nextNode)
 	}

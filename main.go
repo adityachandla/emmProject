@@ -3,6 +3,8 @@ package main
 import (
 	"container/heap"
 	"fmt"
+	"os"
+	"text/tabwriter"
 	"github.com/adityachandla/emmTrial/reader"
 	"github.com/adityachandla/emmTrial/search"
 )
@@ -10,10 +12,23 @@ import (
 func main() {
 	houses := reader.ReadHouses()
 
+	fmt.Printf("House size: %d\n", len(houses))
+
 	searchRes := search.BfsEvaluate(houses)
-	fmt.Printf("Score   Conditions      Subgroup Size\n")
+
+	// Initialize tabWriter for column formatting
+	w := new(tabwriter.Writer)
+		
+	// minwidth, tabwidth, padding, padchar, flags
+	w.Init(os.Stdout, 8, 8, 2, '\t', 0)
+
+	defer w.Flush()
+
+	fmt.Fprintf(w, "Score\tScoreCombined\tScoreComplement\tDifference\tConditions\tSubgroup Size\n")
+	fmt.Fprintf(w, "----\t----\t----\t----\t----\t----\n")
+
 	for searchRes.Len() > 0 {
 		node := heap.Pop(searchRes).(*search.Node)
-		fmt.Printf("%7f %80s %5d\n", node.Score, node.Conditions, node.Size)
+		fmt.Fprintf(w, "%f\t%f\t%f\t%f\t%s\t%d\n", node.Score, node.ScoreCombined, node.ScoreComplement, node.ScoreDifference, node.Conditions, node.Size)
 	}
 }
