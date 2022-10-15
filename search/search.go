@@ -6,11 +6,12 @@ package search
 import (
 	"container/heap"
 	"fmt"
-	"github.com/adityachandla/emmTrial/reader"
-	"github.com/gammazero/deque"
 	"log"
 	"math"
 	"sync"
+
+	"github.com/adityachandla/emmTrial/reader"
+	"github.com/gammazero/deque"
 )
 
 const (
@@ -168,9 +169,9 @@ func processNode(nextNode *Node) {
 
 	// Calculated scorings of the nodes
 	nextNode.Score = math.Abs(nextNode.Correlation - baseScore)
-	nextNode.ScoreComplement = math.Abs(nextNode.CorrelationComplement - baseScore)
+	nextNode.ScoreComplement = math.Abs(nextNode.Correlation - nextNode.CorrelationComplement)
 	fraction := float64(nextNode.Size) / float64(len(houses))
-	nextNode.ScoreCombined = math.Abs(fraction * nextNode.CorrelationComplement + (1 - fraction) * nextNode.Correlation - baseScore)
+	nextNode.ScoreCombined = (fraction * nextNode.Score) + ((1 - fraction) * nextNode.ScoreComplement)
 
 	// Calculate the difference
 	nextNode.ScoreDifference = math.Abs(nextNode.ScoreCombined - nextNode.Score)
