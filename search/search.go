@@ -18,7 +18,7 @@ const (
 	Depth      int     = 4
 	MinSupport float64 = 0.01
 	MaxLen     int     = 40
-	X          float64 = 0.1
+	SwitchOver float64 = 0.1
 )
 
 // TODO should I create a struct for all this?
@@ -169,7 +169,7 @@ func processNode(nextNode *Node) {
 	nextNode.ScoreComplement = math.Abs(correlationComplement - nextNode.Correlation)
 	nextNode.Score = math.Abs(nextNode.Correlation - baseScore)
 	nextNode.ScoreDifference = math.Abs(nextNode.Score - nextNode.ScoreComplement)
-	if float64(nextNode.Size/len(houses)) > X {
+	if (float64(nextNode.Size) / float64(len(houses))) < SwitchOver {
 		nextNode.ScoreRelative = nextNode.ScoreComplement
 	} else {
 		nextNode.ScoreRelative = nextNode.Score
